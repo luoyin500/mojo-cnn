@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/TrainMnist.dir/examples/train_mnist.cpp.o  -o TrainMnist 

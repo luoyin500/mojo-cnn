@@ -1337,7 +1337,7 @@ public:
 		const int layer_node_size = layer->node.size();
 		const int layer_delta_size = layer->delta.size();
 
-		if (dynamic_cast<dropout_layer*> (layer) != NULL) bail("can't have dropout on last layer");
+		//if (dynamic_cast<dropout_layer*> (layer) != NULL) bail("can't have dropout on last layer");
 
 		float E = 0;
 		int max_j_out = 0;
@@ -1439,7 +1439,7 @@ public:
 		base_layer *layer = layer_sets[thread_number][last_layer_index];
 		const int layer_node_size = layer->node.size();
 
-		if (dynamic_cast<dropout_layer*> (layer) != NULL) bail("can't have dropout on last layer");
+		//if (dynamic_cast<dropout_layer*> (layer) != NULL) bail("can't have dropout on last layer");
 
 		float E = 0;
 		int max_j_out = 0;

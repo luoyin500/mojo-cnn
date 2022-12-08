@@ -1,39 +1,3 @@
-// == mojo ====================================================================
-//
-//    Copyright (c) gnawice@gnawice.com. All rights reserved.
-//	  See LICENSE in root folder
-//
-//    Permission is hereby granted, free of charge, to any person obtaining a
-//    copy of this software and associated documentation files(the "Software"),
-//    to deal in the Software without restriction, including without 
-//    limitation the rights to use, copy, modify, merge, publish, distribute,
-//    sublicense, and/or sell copies of the Software, and to permit persons to
-//    whom the Software is furnished to do so, subject to the following 
-//    conditions :
-//
-//    The above copyright notice and this permission notice shall be included
-//    in all copies or substantial portions of the Software.
-//
-//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-//    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-//    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-//    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-//    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
-//    OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-//    THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-// ============================================================================
-//    test.cpp:  Simple example using pre-trained model to test mojo cnn
-//
-//    Instructions: 
-//	  Add the "mojo" folder in your include path.
-//    Download MNIST data and unzip locally on your machine:
-//		(http://yann.lecun.com/exdb/mnist/index.html)
-//    Download CIFAR-10 data and unzip locally on your machine:
-//		(http://www.cs.toronto.edu/~kriz/cifar.html)
-//    Set the data_path variable in the code to point to your data location.
-// ==================================================================== mojo ==
-
 #include <iostream> // cout
 #include <vector>
 #include <sstream>
@@ -47,7 +11,7 @@
 #include "mnist_parser.h"
 using namespace mnist;
 std::string data_path="../data/mnist/";
-std::string model_file="../models/mnist_deepcnet.mojo";
+std::string model_file="../models/snapshots/tmp_11.txt";
 
 /*/
 #include "cifar_parser.h"

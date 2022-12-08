@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/TestMnist.dir/examples/test.cpp.o  -o TestMnist 

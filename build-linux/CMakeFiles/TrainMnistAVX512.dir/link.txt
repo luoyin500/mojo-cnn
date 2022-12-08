@@ -1,0 +1,1 @@
+/usr/bin/c++     CMakeFiles/TrainMnistAVX512.dir/examples/train_mnist.cpp.o  -o TrainMnistAVX512  /usr/lib/gcc/x86_64-linux-gnu/9/libgomp.so /usr/lib/x86_64-linux-gnu/libpthread.so 

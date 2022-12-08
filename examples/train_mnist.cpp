@@ -1,37 +1,3 @@
-// == mojo ====================================================================
-//
-//    Copyright (c) gnawice@gnawice.com. All rights reserved.
-//	  See LICENSE in root folder
-//
-//    Permission is hereby granted, free of charge, to any person obtaining a
-//    copy of this software and associated documentation files(the "Software"),
-//    to deal in the Software without restriction, including without 
-//    limitation the rights to use, copy, modify, merge, publish, distribute,
-//    sublicense, and/or sell copies of the Software, and to permit persons to
-//    whom the Software is furnished to do so, subject to the following 
-//    conditions :
-//
-//    The above copyright notice and this permission notice shall be included
-//    in all copies or substantial portions of the Software.
-//
-//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-//    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-//    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-//    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-//    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
-//    OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-//    THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-// ============================================================================
-//    train_mnist.cpp:  train MNIST classifier
-//
-//    Instructions: 
-//	  Add the "mojo" folder in your include path.
-//    Download MNIST data and unzip locally on your machine:
-//		(http://yann.lecun.com/exdb/mnist/index.html)
-//    Set the data_path variable in the code to point to your data location.
-// ==================================================================== mojo ==
-
 #include <iostream> // cout
 #include <vector>
 #include <sstream>
@@ -94,22 +60,34 @@ int main()
 	cnn.set_mini_batch_size(mini_batch_size);
 	cnn.set_smart_training(true); // automate training
 	cnn.set_learning_rate(initial_learning_rate);
-	
+	cnn.set_max_epochs(10);
+
 	// Note, network descriptions can be read from a text file with similar format to the API
-	cnn.read("../models/mnist_quickstart.txt");
+	//cnn.read("../models/mnist_quickstart.txt");
 
 	/*
 	// to construct the model through API calls...
 	cnn.push_back("I1", "input 28 28 1");				// MNIST is 28x28x1
 	cnn.push_back("C1", "convolution 5 8 1 elu");		// 5x5 kernel, 20 maps. stride 1. out size is 28-5+1=24
-	cnn.push_back("P1", "semi_stochastic_pool 3 3");	// pool 3x3 blocks. stride 3. outsize is 8
+	cnn.push_back("P1", "max_pool 3 3");	// pool 3x3 blocks. stride 3. outsize is 8
 	cnn.push_back("C2i", "convolution 1 16 1 elu");		// 1x1 'inceptoin' layer
 	cnn.push_back("C2", "convolution 5 48 1 elu");		// 5x5 kernel, 200 maps.  out size is 8-5+1=4
-	cnn.push_back("P2", "semi_stochastic_pool 2 2");	// pool 2x2 blocks. stride 2. outsize is 2x2
+	cnn.push_back("P2", "max_pool 2 2");	// pool 2x2 blocks. stride 2. outsize is 2x2
 	cnn.push_back("FC2", "softmax 10");					// 'flatten' of 2x2 input is inferred
 	// connect all the layers. Call connect() manually for all layer connections if you need more exotic networks.
 	cnn.connect_all();
-	// */	
+	// 	
+	*/
+
+	cnn.push_back("I1", "input 28 28 1");
+	cnn.push_back("C1", "convolution 7 8 1 elu"); //28-7+1=22
+	cnn.push_back("P1", "max_pool 2 2"); //11
+	cnn.push_back("C2", "convolution 5 16 1 elu"); //11-5+1=7
+	cnn.push_back("C3", "convolution 3 32 1 elu"); //7-3+1=5
+	cnn.push_back("C4", "convolution 2 64 1 elu"); //5-2+1=4
+	cnn.push_back("P2", "max_pool 2 2");
+	cnn.push_back("FC2", "softmax 10");	
+	cnn.connect_all();
 
 	std::cout << "==  Network Configuration  ====================================================" << std::endl;
 	std::cout << cnn.get_configuration() << std::endl;

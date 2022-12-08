@@ -1,32 +1,3 @@
-// == mojo ====================================================================
-//
-//    Copyright (c) gnawice@gnawice.com. All rights reserved.
-//	  See LICENSE in root folder
-// 
-//    Permission is hereby granted, free of charge, to any person obtaining a
-//    copy of this software and associated documentation files(the "Software"),
-//    to deal in the Software without restriction, including without 
-//    limitation the rights to use, copy, modify, merge, publish, distribute,
-//    sublicense, and/or sell copies of the Software, and to permit persons to
-//    whom the Software is furnished to do so, subject to the following 
-//    conditions :
-//
-//    The above copyright notice and this permission notice shall be included
-//    in all copies or substantial portions of the Software.
-//
-//    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS
-//    OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF 
-//    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-//    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
-//    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT
-//    OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
-//    THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-//
-// ============================================================================
-//    core_math.h: defines matrix class and math functions
-// ==================================================================== mojo ==
-
-
 #pragma once
 
 #include <math.h>
@@ -35,7 +6,6 @@
 #include <cstdlib>
 #include <random>
 #include <algorithm> 
-
 
 namespace mojo
 {
@@ -95,7 +65,7 @@ inline float unwrap_2d_dot_rot180(const float *x1, const float *x2, const int si
 	return v;
 }
 
-
+#ifndef MOJO_AVX512
 inline void unwrap_aligned_NxN(const int N, float *aligned_out,  const float *in, const int in_size, const int stride = 1)
 {
 	const int node_size = (in_size - N)/stride + 1;
@@ -170,6 +140,83 @@ inline void dotsum_unwrapped_NxN(const int N, const float *im,  const float *fil
 		}
 	}
 }
+
+#else
+inline void unwrap_aligned_NxN(const int N, float *aligned_out,  const float *in, const int in_size, const int stride = 1)
+{
+	const int node_size = (in_size - N)/stride + 1;
+	int c1 = 0;
+	int off = 0;
+	const int inc_off = N*N*16;
+
+	for (int j = 0; j < node_size; j += 1) // intput h
+	{
+		for (int i = 0; i < node_size; i += 1) // intput w
+		{
+			const float *tn = in + j*in_size + i;
+
+			if(N==5)
+			{
+				for (int k = 0; k < 5; k++)
+				{
+					aligned_out[c1 + 0 +  k * 80 + off] = tn[0 + 0 + in_size*k];
+					aligned_out[c1 + 16 +  k * 80 + off] = tn[0 + 1 + in_size*k];
+					aligned_out[c1 + 32 + k * 80 + off] = tn[0 + 2 + in_size*k];
+					aligned_out[c1 + 48 + k * 80 + off] = tn[0 + 3 + in_size*k];
+					aligned_out[c1 + 64 + k * 80 + off] = tn[0 + 4 + in_size*k];
+				}
+			}
+			else if(N==3)
+			{
+				aligned_out[c1 + off] = tn[0];
+				aligned_out[c1 + 16 + off] = tn[0 + 1];
+				aligned_out[c1 + 32 + off] = tn[0 + 2];
+
+				aligned_out[c1 + 48 + off] = tn[0 +     in_size];
+				aligned_out[c1 + 64 + off] = tn[0 + 1 + in_size];
+				aligned_out[c1 + 80 + off] = tn[0 + 2 + in_size];
+
+				aligned_out[c1 + 96 + off] = tn[0 +     2 * in_size];
+				aligned_out[c1 + 112 + off] = tn[0 + 1 + 2 * in_size];
+				aligned_out[c1 + 128 + off] = tn[0 + 2 + 2 * in_size];
+			}
+			else
+			{
+				int cnt=0;
+				for (int k = 0; k < N; k++)
+				{
+					for (int m = 0; m < N; m++) 
+					{
+						aligned_out[c1 + cnt*16 + off] = tn[0 + m + in_size*k];
+						cnt++;
+					}
+				}
+			}
+
+
+			off++;
+			if (off > 15) { off = 0; c1 += inc_off; }
+		}
+
+	}
+}
+
+inline void dotsum_unwrapped_NxN(const int N, const float *im,  const float *filter_ptr, float *out, const int outsize)
+{
+	const int NN=N*N;
+	for (int j = 0; j < outsize; j += 16)
+	{
+		float *c = out+j;
+		for(int i=0; i<NN; i++) 
+		{ 
+			const float f = filter_ptr[i];
+			c[0]+=im[0]*f; c[1]+=im[1]*f; c[2]+=im[2]*f; c[3]+=im[3]*f; c[4]+=im[4]*f; c[5]+=im[5]*f; c[6]+=im[6]*f; c[7]+=im[7]*f; c[8]+=im[8]*f; c[9]+=im[9]*f; c[10]+=im[10]*f; c[11]+=im[11]*f; c[12]+=im[12]*f; c[13]+=im[13]*f; c[14]+=im[14]*f; c[15]+=im[15]*f; 
+			im+=16; 
+		}
+	}
+}
+
+#endif
 
 #ifdef MOJO_AVX
 
@@ -363,6 +410,187 @@ inline void dotsum_unwrapped_7x7(const float *_img,  const float *filter_ptr, fl
 	//delete [] f;
 }
 
+#elif defined MOJO_AVX512
+
+#include <immintrin.h>
+
+inline void dotsum_unwrapped_2x2(const float *_img, const float *filter_ptr, float *out, const int outsize)
+{
+
+	const __m512 f0 = _mm512_set1_ps(filter_ptr[0]); const __m512 f1 = _mm512_set1_ps(filter_ptr[1]);
+	const __m512 f2 = _mm512_set1_ps(filter_ptr[2]); const __m512 f3 = _mm512_set1_ps(filter_ptr[3]);
+
+	for (int j = 0; j < outsize; j += 16)
+	{
+		__m512 a, c0, c1;
+		// multiply filter
+		a = _mm512_load_ps(_img); c0 = _mm512_mul_ps(a, f0);
+		a = _mm512_load_ps(_img + 16); c1 = _mm512_mul_ps(a, f1); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 32); c1 = _mm512_mul_ps(a, f2); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 48); c1 = _mm512_mul_ps(a, f3); c0 = _mm512_add_ps(c0, c1);
+		
+		// add result to output
+		a = _mm512_load_ps(out + j); 
+		c0 = _mm512_add_ps(c0, a);
+		_mm512_stream_ps(out + j, c0);
+		_img += 64;
+	}
+
+}
+
+inline void dotsum_unwrapped_3x3(const float *_img, const float *filter_ptr, float *out, const int outsize)
+{
+	const __m512 f0 = _mm512_set1_ps(filter_ptr[0]); const __m512 f1 = _mm512_set1_ps(filter_ptr[1]);
+	const __m512 f2 = _mm512_set1_ps(filter_ptr[2]); const __m512 f3 = _mm512_set1_ps(filter_ptr[3]);
+	const __m512 f4 = _mm512_set1_ps(filter_ptr[4]); const __m512 f5 = _mm512_set1_ps(filter_ptr[5]);
+	const __m512 f6 = _mm512_set1_ps(filter_ptr[6]); const __m512 f7 = _mm512_set1_ps(filter_ptr[7]);
+	const __m512 f8 = _mm512_set1_ps(filter_ptr[8]);
+
+	for (int j = 0; j < outsize; j += 16)//stride) // intput w
+	{
+		__m512 a, c0, c1;
+		// multiply filter
+		a = _mm512_load_ps(_img); c0 = _mm512_mul_ps(a, f0);
+		a = _mm512_load_ps(_img + 16); c1 = _mm512_mul_ps(a, f1); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 32); c1 = _mm512_mul_ps(a, f2); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 48); c1 = _mm512_mul_ps(a, f3); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 64); c1 = _mm512_mul_ps(a, f4); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 80); c1 = _mm512_mul_ps(a, f5); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 96); c1 = _mm512_mul_ps(a, f6); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 112); c1 = _mm512_mul_ps(a, f7); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 128); c1 = _mm512_mul_ps(a, f8); c0 = _mm512_add_ps(c0, c1);
+		// add result to output
+		a = _mm512_load_ps(out + j); 
+		c0 = _mm512_add_ps(c0, a);
+		_mm512_stream_ps(out + j, c0);
+		_img += 144;
+	}
+}
+
+
+inline void dotsum_unwrapped_4x4(const float *_img, const float *filter_ptr, float *out, const int outsize)
+{
+	const __m512 f0 = _mm512_set1_ps(filter_ptr[0]); const __m512 f1 = _mm512_set1_ps(filter_ptr[1]);
+	const __m512 f2 = _mm512_set1_ps(filter_ptr[2]); const __m512 f3 = _mm512_set1_ps(filter_ptr[3]);
+	const __m512 f4 = _mm512_set1_ps(filter_ptr[4]); const __m512 f5 = _mm512_set1_ps(filter_ptr[5]);
+	const __m512 f6 = _mm512_set1_ps(filter_ptr[6]); const __m512 f7 = _mm512_set1_ps(filter_ptr[7]);
+	const __m512 f8 = _mm512_set1_ps(filter_ptr[8]); const __m512 f9 = _mm512_set1_ps(filter_ptr[9]);
+	const __m512 f10 = _mm512_set1_ps(filter_ptr[10]); const __m512 f11 = _mm512_set1_ps(filter_ptr[11]);
+	const __m512 f12 = _mm512_set1_ps(filter_ptr[12]); const __m512 f13 = _mm512_set1_ps(filter_ptr[13]);
+	const __m512 f14 = _mm512_set1_ps(filter_ptr[14]); const __m512 f15 = _mm512_set1_ps(filter_ptr[15]);
+
+	for (int j = 0; j < outsize; j += 16)//stride) // intput w
+	{
+		__m512 a, c0, c1;
+		// multiply filter
+		a = _mm512_load_ps(_img); c0 = _mm512_mul_ps(a, f0);
+		a = _mm512_load_ps(_img + 16); c1 = _mm512_mul_ps(a, f1); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 32); c1 = _mm512_mul_ps(a, f2); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 48); c1 = _mm512_mul_ps(a, f3); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 64); c1 = _mm512_mul_ps(a, f4); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 80); c1 = _mm512_mul_ps(a, f5); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 96); c1 = _mm512_mul_ps(a, f6); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 112); c1 = _mm512_mul_ps(a, f7); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 128); c1 = _mm512_mul_ps(a, f8); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 144); c1 = _mm512_mul_ps(a, f9); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 160); c1 = _mm512_mul_ps(a, f10); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 176); c1 = _mm512_mul_ps(a, f11); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 192); c1 = _mm512_mul_ps(a, f12); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 208); c1 = _mm512_mul_ps(a, f13); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 224); c1 = _mm512_mul_ps(a, f14); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 240); c1 = _mm512_mul_ps(a, f15); c0 = _mm512_add_ps(c0, c1);
+		// add result to output
+		a = _mm512_load_ps(out + j); 
+		c0 = _mm512_add_ps(c0, a);
+		_mm512_stream_ps(out + j, c0);
+		_img += 256;
+	}
+
+}
+
+
+inline void dotsum_unwrapped_5x5(const float *_img, const float *filter_ptr, float *out, const int outsize)
+{
+	const __m512 f0 = _mm512_set1_ps(filter_ptr[0]); const __m512 f1 = _mm512_set1_ps(filter_ptr[1]);
+	const __m512 f2 = _mm512_set1_ps(filter_ptr[2]); const __m512 f3 = _mm512_set1_ps(filter_ptr[3]);
+	const __m512 f4 = _mm512_set1_ps(filter_ptr[4]); const __m512 f5 = _mm512_set1_ps(filter_ptr[5]);
+	const __m512 f6 = _mm512_set1_ps(filter_ptr[6]); const __m512 f7 = _mm512_set1_ps(filter_ptr[7]);
+	const __m512 f8 = _mm512_set1_ps(filter_ptr[8]); const __m512 f9 = _mm512_set1_ps(filter_ptr[9]);
+	const __m512 f10 = _mm512_set1_ps(filter_ptr[10]); const __m512 f11 = _mm512_set1_ps(filter_ptr[11]);
+	const __m512 f12 = _mm512_set1_ps(filter_ptr[12]); const __m512 f13 = _mm512_set1_ps(filter_ptr[13]);
+	const __m512 f14 = _mm512_set1_ps(filter_ptr[14]); const __m512 f15 = _mm512_set1_ps(filter_ptr[15]);
+	const __m512 f16 = _mm512_set1_ps(filter_ptr[16]); const __m512 f17 = _mm512_set1_ps(filter_ptr[17]);
+	const __m512 f18 = _mm512_set1_ps(filter_ptr[18]); const __m512 f19 = _mm512_set1_ps(filter_ptr[19]);
+	const __m512 f20 = _mm512_set1_ps(filter_ptr[20]); const __m512 f21 = _mm512_set1_ps(filter_ptr[21]);
+	const __m512 f22 = _mm512_set1_ps(filter_ptr[22]); const __m512 f23 = _mm512_set1_ps(filter_ptr[23]);
+	const __m512 f24 = _mm512_set1_ps(filter_ptr[24]);
+	
+	for (int j = 0; j < outsize; j += 16)
+	{	
+		
+		__m512 a, c0, c1;
+		
+		a = _mm512_load_ps(_img); c0 = _mm512_mul_ps(a, f0);
+
+		a = _mm512_load_ps(_img + 16); c1 = _mm512_mul_ps(a, f1); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 32); c1 = _mm512_mul_ps(a, f2); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 48); c1 = _mm512_mul_ps(a, f3); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 64); c1 = _mm512_mul_ps(a, f4); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 80); c1 = _mm512_mul_ps(a, f5); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 96); c1 = _mm512_mul_ps(a, f6); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 112); c1 = _mm512_mul_ps(a, f7); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 128); c1 = _mm512_mul_ps(a, f8); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 144); c1 = _mm512_mul_ps(a, f9); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 160); c1 = _mm512_mul_ps(a, f10); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 176); c1 = _mm512_mul_ps(a, f11); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 192); c1 = _mm512_mul_ps(a, f12); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 208); c1 = _mm512_mul_ps(a, f13); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 224); c1 = _mm512_mul_ps(a, f14); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 240); c1 = _mm512_mul_ps(a, f15); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 256); c1 = _mm512_mul_ps(a, f16); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 272); c1 = _mm512_mul_ps(a, f17); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 288); c1 = _mm512_mul_ps(a, f18); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 304); c1 = _mm512_mul_ps(a, f19); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 320); c1 = _mm512_mul_ps(a, f20); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 336); c1 = _mm512_mul_ps(a, f21); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 352); c1 = _mm512_mul_ps(a, f22); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 368); c1 = _mm512_mul_ps(a, f23); c0 = _mm512_add_ps(c0, c1);
+		a = _mm512_load_ps(_img + 384); c1 = _mm512_mul_ps(a, f24); c0 = _mm512_add_ps(c0, c1);
+
+		a = _mm512_load_ps(out + j);
+		c0 = _mm512_add_ps(c0, a);
+		
+		_mm512_stream_ps(out + j, c0);
+
+		_img += 400;
+	}
+}
+
+inline void dotsum_unwrapped_7x7(const float *_img, const float *filter_ptr, float *out, const int outsize)
+{
+	__m512 f[49];
+	for(int i=0; i<49; i++) f[i]= _mm512_set1_ps(filter_ptr[i]); 
+
+	for (int j = 0; j < outsize; j += 16)
+	{
+		__m512 a, c0, c1;
+
+		a = _mm512_load_ps(_img);
+		c0 = _mm512_mul_ps(a, f[0]);
+		for(int i=1; i<49;i++)
+		{
+			a = _mm512_load_ps(_img + 16*i); c1 = _mm512_mul_ps(a, f[i]); c0 = _mm512_add_ps(c0, c1);
+		}
+
+		a = _mm512_load_ps(out + j);
+		c0 = _mm512_add_ps(c0, a);
+
+		_mm512_stream_ps(out + j, c0);
+		_img += 49*16;
+
+	}
+}
+
 #else // no AVX
 
 inline void dotsum_unwrapped_2x2(const float *_img, const float *filter_ptr, float *out, const int outsize)
@@ -402,7 +630,11 @@ class matrix
 	// 4 extra for alignment and 4 for 3 padding for SSE
 	//float *new_x(const int size) { _x_mem = new float[size + 4+3];  x = (float *)(((uintptr_t)_x_mem + 16) & ~(uintptr_t)0x0F); return x; }
 	// avx mem aligment
+	#ifndef MOJO_AVX512
 	float *new_x(const int size) { _x_mem = new float[size + 8 + 7];  x = (float *)(((uintptr_t)_x_mem + 32) & ~(uintptr_t)0x1F); return x; }
+	#else
+	float *new_x(const int size) { _x_mem = new float[size + 16 + 15];  x = (float *)(((uintptr_t)_x_mem + 64) & ~(uintptr_t)0x3F); return x; }
+	#endif
 public:
 	std::string _name;
 	int cols, rows, chans;
@@ -415,8 +647,14 @@ public:
 		if (chan_aligned)
 		{
 			int s = w*h;
+			#ifndef MOJO_AVX512
 			const int remainder = s % 8;
 			if (remainder > 0) s += 8 - remainder;
+			#else
+			const int remainder = s % 16;
+			if (remainder > 0) s += 16 - remainder;
+			#endif
+
 			return s;
 		}
 		else return w*h;

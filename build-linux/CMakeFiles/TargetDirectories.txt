@@ -1,0 +1,6 @@
+/workspaces/mojo-cnn/build-linux/CMakeFiles/edit_cache.dir
+/workspaces/mojo-cnn/build-linux/CMakeFiles/TestMnist.dir
+/workspaces/mojo-cnn/build-linux/CMakeFiles/TestMnistAVX512.dir
+/workspaces/mojo-cnn/build-linux/CMakeFiles/rebuild_cache.dir
+/workspaces/mojo-cnn/build-linux/CMakeFiles/TrainMnist.dir
+/workspaces/mojo-cnn/build-linux/CMakeFiles/TrainMnistAVX512.dir
